@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface SensorStatus {
   accelerometer: boolean;
@@ -7,15 +7,18 @@ interface SensorStatus {
   orientation: boolean;
 }
 
-export const useSensors = (isRecording: boolean, onSensorData: (sensorType: string, data: any) => void) => {
+export const useSensors = (
+  isRecording: boolean,
+  onSensorData: (sensorType: string, data: any) => void
+) => {
   const [sensorStatus, setSensorStatus] = useState<SensorStatus>({
     accelerometer: false,
     gyroscope: false,
     geolocation: false,
-    orientation: false
+    orientation: false,
   });
 
-  const [sensors, setSensors] = useState<{
+  const sensorsRef = useRef<{
     accelerometer?: any;
     gyroscope?: any;
     geolocationWatchId?: number;
@@ -26,38 +29,38 @@ export const useSensors = (isRecording: boolean, onSensorData: (sensorType: stri
       accelerometer: false,
       gyroscope: false,
       geolocation: false,
-      orientation: false
+      orientation: false,
     };
 
     // Check accelerometer
-    if ('Accelerometer' in window) {
+    if ("Accelerometer" in window) {
       try {
         const accel = new (window as any).Accelerometer({ frequency: 10 });
         status.accelerometer = true;
         accel.stop();
       } catch (e) {
-        console.log('Accelerometer not available:', e);
+        console.log("Accelerometer not available:", e);
       }
     }
 
     // Check gyroscope
-    if ('Gyroscope' in window) {
+    if ("Gyroscope" in window) {
       try {
         const gyro = new (window as any).Gyroscope({ frequency: 10 });
         status.gyroscope = true;
         gyro.stop();
       } catch (e) {
-        console.log('Gyroscope not available:', e);
+        console.log("Gyroscope not available:", e);
       }
     }
 
     // Check geolocation
-    if ('geolocation' in navigator) {
+    if ("geolocation" in navigator) {
       status.geolocation = true;
     }
 
     // Check orientation
-    if ('DeviceOrientationEvent' in window) {
+    if ("DeviceOrientationEvent" in window) {
       status.orientation = true;
     }
 
@@ -68,53 +71,60 @@ export const useSensors = (isRecording: boolean, onSensorData: (sensorType: stri
     checkSensorSupport();
   }, [checkSensorSupport]);
 
+  const onSensorDataRef = useRef(onSensorData);
+  onSensorDataRef.current = onSensorData;
+
+  const stopAllSensors = useCallback(() => {
+    const currentSensors = sensorsRef.current;
+    if (currentSensors.accelerometer) currentSensors.accelerometer.stop();
+    if (currentSensors.gyroscope) currentSensors.gyroscope.stop();
+    if (currentSensors.geolocationWatchId !== undefined) {
+      navigator.geolocation.clearWatch(currentSensors.geolocationWatchId);
+    }
+    sensorsRef.current = {};
+  }, []);
+
   useEffect(() => {
     if (!isRecording) {
-      // Stop all sensors
-      if (sensors.accelerometer) sensors.accelerometer.stop();
-      if (sensors.gyroscope) sensors.gyroscope.stop();
-      if (sensors.geolocationWatchId !== undefined) {
-        navigator.geolocation.clearWatch(sensors.geolocationWatchId);
-      }
-      setSensors({});
+      stopAllSensors();
       return;
     }
 
     const newSensors: any = {};
 
     // Start accelerometer
-    if (sensorStatus.accelerometer && 'Accelerometer' in window) {
+    if (sensorStatus.accelerometer && "Accelerometer" in window) {
       try {
         const accel = new (window as any).Accelerometer({ frequency: 10 });
-        accel.addEventListener('reading', () => {
-          onSensorData('accelerometer', {
+        accel.addEventListener("reading", () => {
+          onSensorDataRef.current("accelerometer", {
             x: accel.x,
             y: accel.y,
-            z: accel.z
+            z: accel.z,
           });
         });
         accel.start();
         newSensors.accelerometer = accel;
       } catch (e) {
-        console.error('Error starting accelerometer:', e);
+        console.error("Error starting accelerometer:", e);
       }
     }
 
     // Start gyroscope
-    if (sensorStatus.gyroscope && 'Gyroscope' in window) {
+    if (sensorStatus.gyroscope && "Gyroscope" in window) {
       try {
         const gyro = new (window as any).Gyroscope({ frequency: 10 });
-        gyro.addEventListener('reading', () => {
-          onSensorData('gyroscope', {
+        gyro.addEventListener("reading", () => {
+          onSensorDataRef.current("gyroscope", {
             x: gyro.x,
             y: gyro.y,
-            z: gyro.z
+            z: gyro.z,
           });
         });
         gyro.start();
         newSensors.gyroscope = gyro;
       } catch (e) {
-        console.error('Error starting gyroscope:', e);
+        console.error("Error starting gyroscope:", e);
       }
     }
 
@@ -122,27 +132,27 @@ export const useSensors = (isRecording: boolean, onSensorData: (sensorType: stri
     if (sensorStatus.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
         (position) => {
-          onSensorData('geolocation', {
+          onSensorDataRef.current("geolocation", {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy,
             altitude: position.coords.altitude,
             heading: position.coords.heading,
-            speed: position.coords.speed
+            speed: position.coords.speed,
           });
         },
         (error) => {
-          console.error('Geolocation error:', error);
+          console.error("Geolocation error:", error);
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 1000
+          maximumAge: 1000,
         }
       );
       newSensors.geolocationWatchId = watchId;
     }
 
-    setSensors(newSensors);
+    sensorsRef.current = newSensors;
 
     return () => {
       if (newSensors.accelerometer) newSensors.accelerometer.stop();
@@ -151,7 +161,7 @@ export const useSensors = (isRecording: boolean, onSensorData: (sensorType: stri
         navigator.geolocation.clearWatch(newSensors.geolocationWatchId);
       }
     };
-  }, [isRecording, sensorStatus, onSensorData]);
+  }, [isRecording, sensorStatus, stopAllSensors]);
 
   return sensorStatus;
 };
