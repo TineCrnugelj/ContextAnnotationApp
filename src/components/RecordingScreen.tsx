@@ -1,12 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Video, VideoOff, Camera, Activity } from 'lucide-react';
-import { useRecording } from '@/hooks/useRecording';
-import { useSensors } from '@/hooks/useSensors';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Video, VideoOff, Camera, Activity } from "lucide-react";
+import { useRecording } from "@/hooks/useRecording";
+import { useSensors } from "@/hooks/useSensors";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface EventType {
   id: string;
@@ -25,43 +33,50 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
   const [cameraReady, setCameraReady] = useState(false);
   const [eventTypes, setEventTypes] = useState<EventType[]>([]);
   const [eventCount, setEventCount] = useState(0);
-  
-  const { isRecording, startRecording, stopRecording, logEvent, logSensorData } = useRecording();
-  
+  const [showVideoDialog, setShowVideoDialog] = useState(false);
+
+  const {
+    isRecording,
+    startRecording,
+    stopRecording,
+    logEvent,
+    logSensorData,
+  } = useRecording();
+
   const handleSensorData = async (sensorType: string, data: any) => {
     // Get sensor type ID
     const { data: sensorTypeData } = await supabase
-      .from('sensor_types')
-      .select('id')
-      .eq('name', sensorType)
+      .from("sensor_types")
+      .select("id")
+      .eq("name", sensorType)
       .single();
-    
+
     if (sensorTypeData) {
       logSensorData(sensorTypeData.id, data);
     }
   };
-  
+
   const sensorStatus = useSensors(isRecording, handleSensorData);
 
   useEffect(() => {
     // Load event types
     const loadEventTypes = async () => {
       const { data, error } = await supabase
-        .from('event_types')
-        .select('*')
-        .eq('enabled', true)
-        .order('display_order');
-      
+        .from("event_types")
+        .select("*")
+        .eq("enabled", true)
+        .order("display_order");
+
       if (error) {
-        console.error('Error loading event types:', error);
+        console.error("Error loading event types:", error);
         toast({
-          title: 'Error',
-          description: 'Failed to load event types',
-          variant: 'destructive'
+          title: "Error",
+          description: "Failed to load event types",
+          variant: "destructive",
         });
         return;
       }
-      
+
       setEventTypes(data || []);
     };
 
@@ -72,26 +87,27 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: 'user',
+            facingMode: "environment",
             width: { ideal: 1280 },
-            height: { ideal: 720 }
+            height: { ideal: 720 },
           },
-          audio: true
+          audio: true,
         });
-        
+
         setStream(mediaStream);
-        
+
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
-        
+
         setCameraReady(true);
       } catch (error) {
-        console.error('Error accessing camera:', error);
+        console.error("Error accessing camera:", error);
         toast({
-          title: 'Camera Error',
-          description: 'Failed to access camera. Please grant camera permissions.',
-          variant: 'destructive'
+          title: "Camera Error",
+          description:
+            "Failed to access camera. Please grant camera permissions.",
+          variant: "destructive",
         });
       }
     };
@@ -100,7 +116,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
     return () => {
       if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
@@ -109,8 +125,23 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
     if (isRecording) {
       await stopRecording();
       setEventCount(0);
-    } else if (stream) {
-      await startRecording(stream);
+    } else {
+      setShowVideoDialog(true);
+    }
+  };
+
+  const handleStartWithVideo = async () => {
+    setShowVideoDialog(false);
+    if (stream) {
+      await startRecording(stream, true);
+      setEventCount(0);
+    }
+  };
+
+  const handleStartWithoutVideo = async () => {
+    setShowVideoDialog(false);
+    if (stream) {
+      await startRecording(stream, false);
       setEventCount(0);
     }
   };
@@ -118,18 +149,21 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
   const handleEventClick = (eventTypeId: string) => {
     if (!isRecording) return;
     logEvent(eventTypeId);
-    setEventCount(prev => prev + 1);
-    
+    setEventCount((prev) => prev + 1);
+
     // Visual feedback
-    const eventType = eventTypes.find(e => e.id === eventTypeId);
+    const eventType = eventTypes.find((e) => e.id === eventTypeId);
     toast({
-      title: 'Event Logged',
-      description: eventType?.label || 'Event',
-      duration: 1000
+      title: "Event Logged",
+      description: eventType?.label || "Event",
+      duration: 1000,
     });
   };
 
-  const sensorsOk = sensorStatus.accelerometer || sensorStatus.gyroscope || sensorStatus.geolocation;
+  const sensorsOk =
+    sensorStatus.accelerometer ||
+    sensorStatus.gyroscope ||
+    sensorStatus.geolocation;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -145,13 +179,19 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
       {/* Status Bar */}
       <div className="bg-card border-b p-3 flex items-center justify-around">
-        <Badge variant={cameraReady ? "default" : "secondary"} className="flex items-center gap-1">
+        <Badge
+          variant={cameraReady ? "default" : "secondary"}
+          className="flex items-center gap-1"
+        >
           <Camera className="h-3 w-3" />
-          Camera {cameraReady ? 'OK' : 'Not Ready'}
+          Camera {cameraReady ? "OK" : "Not Ready"}
         </Badge>
-        <Badge variant={sensorsOk ? "default" : "secondary"} className="flex items-center gap-1">
+        <Badge
+          variant={sensorsOk ? "default" : "secondary"}
+          className="flex items-center gap-1"
+        >
           <Activity className="h-3 w-3" />
-          Sensors {sensorsOk ? 'OK' : 'Limited'}
+          Sensors {sensorsOk ? "OK" : "Limited"}
         </Badge>
         {isRecording && (
           <Badge variant="destructive" className="animate-pulse">
@@ -218,6 +258,30 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
           )}
         </Button>
       </div>
+
+      {/* Video Recording Dialog */}
+      <Dialog open={showVideoDialog} onOpenChange={setShowVideoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Video?</DialogTitle>
+            <DialogDescription>
+              Do you want to record video along with event annotations?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={handleStartWithoutVideo}
+              className="w-full sm:w-auto"
+            >
+              No, Events Only
+            </Button>
+            <Button onClick={handleStartWithVideo} className="w-full sm:w-auto">
+              Yes, Record Video
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -8,139 +8,179 @@ export const useRecording = () => {
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(
     null
   );
+  const [recordingWithVideo, setRecordingWithVideo] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const videoChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const startRecording = useCallback(async (stream: MediaStream) => {
-    try {
-      // Create recording entry in database
-      const { data: recording, error } = await supabase
-        .from("recordings")
-        .insert({
-          status: "recording",
-          start_time: new Date().toISOString(),
-        })
-        .select()
-        .single();
+  const startRecording = useCallback(
+    async (stream: MediaStream, withVideo: boolean = true) => {
+      try {
+        // Create recording entry in database
+        const { data: recording, error } = await supabase
+          .from("recordings")
+          .insert({
+            status: "recording",
+            start_time: new Date().toISOString(),
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setRecordingId(recording.id);
-      setRecordingStartTime(Date.now());
-      streamRef.current = stream;
+        setRecordingId(recording.id);
+        setRecordingStartTime(Date.now());
+        setRecordingWithVideo(withVideo);
+        streamRef.current = stream;
 
-      // Set up media recorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "video/webm;codecs=vp9",
-      });
+        if (withVideo) {
+          // Set up media recorder
+          const mediaRecorder = new MediaRecorder(stream, {
+            mimeType: "video/webm;codecs=vp9",
+          });
 
-      videoChunksRef.current = [];
+          videoChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          videoChunksRef.current.push(event.data);
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              videoChunksRef.current.push(event.data);
+            }
+          };
+
+          mediaRecorder.start(1000); // Capture in 1-second chunks
+          mediaRecorderRef.current = mediaRecorder;
         }
-      };
 
-      mediaRecorder.start(1000); // Capture in 1-second chunks
-      mediaRecorderRef.current = mediaRecorder;
-      setIsRecording(true);
+        setIsRecording(true);
 
-      toast({
-        title: "Recording started",
-        description: "Video and sensor data are being recorded",
-      });
+        toast({
+          title: "Recording started",
+          description: withVideo
+            ? "Video and event annotations are being recorded"
+            : "Event annotations are being recorded",
+        });
+      } catch (error) {
+        console.error("Error starting recording:", error);
+        toast({
+          title: "Error",
+          description: "Failed to start recording",
+          variant: "destructive",
+        });
+      }
+    },
+    []
+  );
+
+  const stopRecording = useCallback(async () => {
+    if (!recordingId || !recordingStartTime) return;
+
+    try {
+      const durationSeconds = Math.floor(
+        (Date.now() - recordingStartTime) / 1000
+      );
+
+      if (recordingWithVideo && mediaRecorderRef.current) {
+        // Handle video recording stop
+        return new Promise<void>((resolve) => {
+          const mediaRecorder = mediaRecorderRef.current!;
+
+          mediaRecorder.onstop = async () => {
+            try {
+              const videoBlob = new Blob(videoChunksRef.current, {
+                type: "video/webm",
+              });
+              const fileName = `${recordingId}.webm`;
+
+              // Upload to Supabase Storage
+              const { error: uploadError } = await supabase.storage
+                .from("recordings")
+                .upload(fileName, videoBlob, {
+                  contentType: "video/webm",
+                  upsert: true,
+                });
+
+              if (uploadError) throw uploadError;
+
+              // Get signed URL (valid for 1 year)
+              const { data: signedUrlData, error: signedUrlError } =
+                await supabase.storage
+                  .from("recordings")
+                  .createSignedUrl(fileName, 31536000); // 1 year in seconds
+
+              if (signedUrlError) throw signedUrlError;
+
+              // Update recording with end time and video URL
+              const { error: updateError } = await supabase
+                .from("recordings")
+                .update({
+                  end_time: new Date().toISOString(),
+                  video_url: signedUrlData.signedUrl,
+                  status: "completed",
+                  duration_seconds: durationSeconds,
+                })
+                .eq("id", recordingId);
+
+              if (updateError) throw updateError;
+
+              toast({
+                title: "Recording saved",
+                description:
+                  "Video and annotations have been saved successfully",
+              });
+
+              setIsRecording(false);
+              setRecordingId(null);
+              setRecordingStartTime(null);
+              setRecordingWithVideo(false);
+              videoChunksRef.current = [];
+
+              resolve();
+            } catch (error) {
+              console.error("Error stopping recording:", error);
+              toast({
+                title: "Error",
+                description: "Failed to save recording",
+                variant: "destructive",
+              });
+              resolve();
+            }
+          };
+
+          mediaRecorder.stop();
+        });
+      } else {
+        // Handle events-only recording stop
+        const { error: updateError } = await supabase
+          .from("recordings")
+          .update({
+            end_time: new Date().toISOString(),
+            status: "completed",
+            duration_seconds: durationSeconds,
+          })
+          .eq("id", recordingId);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: "Recording saved",
+          description: "Event annotations have been saved successfully",
+        });
+
+        setIsRecording(false);
+        setRecordingId(null);
+        setRecordingStartTime(null);
+        setRecordingWithVideo(false);
+      }
     } catch (error) {
-      console.error("Error starting recording:", error);
+      console.error("Error stopping recording:", error);
       toast({
         title: "Error",
-        description: "Failed to start recording",
+        description: "Failed to save recording",
         variant: "destructive",
       });
     }
-  }, []);
-
-  const stopRecording = useCallback(async () => {
-    if (!mediaRecorderRef.current || !recordingId || !recordingStartTime)
-      return;
-
-    return new Promise<void>((resolve) => {
-      const mediaRecorder = mediaRecorderRef.current!;
-
-      mediaRecorder.onstop = async () => {
-        try {
-          const videoBlob = new Blob(videoChunksRef.current, {
-            type: "video/webm",
-          });
-          const fileName = `${recordingId}.webm`;
-
-          // Upload to Supabase Storage
-          const { error: uploadError } = await supabase.storage
-            .from("recordings")
-            .upload(fileName, videoBlob, {
-              contentType: "video/webm",
-              upsert: true,
-            });
-
-          if (uploadError) throw uploadError;
-
-          // Get signed URL (valid for 1 year)
-          const { data: signedUrlData, error: signedUrlError } =
-            await supabase.storage
-              .from("recordings")
-              .createSignedUrl(fileName, 31536000); // 1 year in seconds
-
-          if (signedUrlError) throw signedUrlError;
-
-          // Update recording with end time and video URL
-          const durationSeconds = Math.floor(
-            (Date.now() - recordingStartTime) / 1000
-          );
-
-          const { error: updateError } = await supabase
-            .from("recordings")
-            .update({
-              end_time: new Date().toISOString(),
-              video_url: signedUrlData.signedUrl,
-              status: "completed",
-              duration_seconds: durationSeconds,
-            })
-            .eq("id", recordingId);
-
-          if (updateError) throw updateError;
-
-          // Stop all tracks
-          if (streamRef.current) {
-            streamRef.current.getTracks().forEach((track) => track.stop());
-          }
-
-          toast({
-            title: "Recording saved",
-            description: "Video and annotations have been saved successfully",
-          });
-
-          setIsRecording(false);
-          setRecordingId(null);
-          setRecordingStartTime(null);
-          videoChunksRef.current = [];
-
-          resolve();
-        } catch (error) {
-          console.error("Error stopping recording:", error);
-          toast({
-            title: "Error",
-            description: "Failed to save recording",
-            variant: "destructive",
-          });
-          resolve();
-        }
-      };
-
-      mediaRecorder.stop();
-    });
-  }, [recordingId, recordingStartTime]);
+  }, [recordingId, recordingStartTime, recordingWithVideo]);
 
   const logEvent = useCallback(
     async (eventTypeId: string) => {

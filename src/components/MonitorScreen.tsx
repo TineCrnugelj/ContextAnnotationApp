@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Play, Clock, Calendar } from "lucide-react";
+import { ArrowLeft, Play, Clock, Calendar, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -110,6 +110,53 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
     )}`;
   };
 
+  const handleDelete = async (recordingId: string, videoUrl: string | null) => {
+    try {
+      // Delete video file from storage if it exists
+      if (videoUrl) {
+        const fileName = `${recordingId}.webm`;
+        const { error: storageError } = await supabase.storage
+          .from("recordings")
+          .remove([fileName]);
+
+        if (storageError) {
+          console.error("Error deleting video file:", storageError);
+        }
+      }
+
+      // Delete events (should cascade automatically if foreign key is set up)
+      const { error: eventsError } = await supabase
+        .from("events")
+        .delete()
+        .eq("recording_id", recordingId);
+
+      if (eventsError) throw eventsError;
+
+      // Delete recording
+      const { error: recordingError } = await supabase
+        .from("recordings")
+        .delete()
+        .eq("id", recordingId);
+
+      if (recordingError) throw recordingError;
+
+      // Update local state
+      setRecordings(recordings.filter((r) => r.id !== recordingId));
+
+      toast({
+        title: "Recording deleted",
+        description: "Recording and associated events have been removed",
+      });
+    } catch (error) {
+      console.error("Error deleting recording:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete recording",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -186,17 +233,28 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
                   </div>
                 )}
 
-                {recording.video_url && (
+                <div className="flex gap-2 mt-3">
+                  {recording.video_url && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setSelectedRecording(recording)}
+                    >
+                      <Play className="mr-2 h-4 w-4" />
+                      View Recording
+                    </Button>
+                  )}
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     size="sm"
-                    className="w-full"
-                    onClick={() => setSelectedRecording(recording)}
+                    onClick={() =>
+                      handleDelete(recording.id, recording.video_url)
+                    }
                   >
-                    <Play className="mr-2 h-4 w-4" />
-                    View Recording
+                    <Trash2 className="h-4 w-4" />
                   </Button>
-                )}
+                </div>
               </Card>
             ))}
           </div>
