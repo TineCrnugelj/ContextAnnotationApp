@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Play, Clock, Calendar, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Play,
+  Clock,
+  Calendar,
+  Trash2,
+  Download,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -108,6 +115,33 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
     return `${mins}:${secs.toString().padStart(2, "0")}.${Math.floor(
       ms / 100
     )}`;
+  };
+
+  const handleDownload = async (videoUrl: string, recordingId: string) => {
+    try {
+      const response = await fetch(videoUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `recording-${recordingId}.webm`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Download started",
+        description: "Video is being saved to your device",
+      });
+    } catch (error) {
+      console.error("Error downloading video:", error);
+      toast({
+        title: "Error",
+        description: "Failed to download video",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDelete = async (recordingId: string, videoUrl: string | null) => {
@@ -235,15 +269,26 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
 
                 <div className="flex gap-2 mt-3">
                   {recording.video_url && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setSelectedRecording(recording)}
-                    >
-                      <Play className="mr-2 h-4 w-4" />
-                      View Recording
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setSelectedRecording(recording)}
+                      >
+                        <Play className="mr-2 h-4 w-4" />
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          handleDownload(recording.video_url!, recording.id)
+                        }
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant="destructive"
