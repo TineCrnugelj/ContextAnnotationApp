@@ -163,7 +163,13 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
   const sensorsOk =
     sensorStatus.accelerometer ||
     sensorStatus.gyroscope ||
-    sensorStatus.geolocation;
+    sensorStatus.geolocation ||
+    sensorStatus.magnetometer ||
+    sensorStatus.linear_acceleration ||
+    sensorStatus.gravity ||
+    sensorStatus.absolute_orientation ||
+    sensorStatus.relative_orientation ||
+    sensorStatus.ambient_light;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

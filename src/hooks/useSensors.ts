@@ -5,6 +5,12 @@ interface SensorStatus {
   gyroscope: boolean;
   geolocation: boolean;
   orientation: boolean;
+  magnetometer: boolean;
+  linear_acceleration: boolean;
+  gravity: boolean;
+  absolute_orientation: boolean;
+  relative_orientation: boolean;
+  ambient_light: boolean;
 }
 
 export const useSensors = (
@@ -16,11 +22,23 @@ export const useSensors = (
     gyroscope: false,
     geolocation: false,
     orientation: false,
+    magnetometer: false,
+    linear_acceleration: false,
+    gravity: false,
+    absolute_orientation: false,
+    relative_orientation: false,
+    ambient_light: false,
   });
 
   const sensorsRef = useRef<{
     accelerometer?: any;
     gyroscope?: any;
+    magnetometer?: any;
+    linear_acceleration?: any;
+    gravity?: any;
+    absolute_orientation?: any;
+    relative_orientation?: any;
+    ambient_light?: any;
     geolocationWatchId?: number;
   }>({});
 
@@ -30,6 +48,12 @@ export const useSensors = (
       gyroscope: false,
       geolocation: false,
       orientation: false,
+      magnetometer: false,
+      linear_acceleration: false,
+      gravity: false,
+      absolute_orientation: false,
+      relative_orientation: false,
+      ambient_light: false,
     };
 
     // Check accelerometer
@@ -51,6 +75,78 @@ export const useSensors = (
         gyro.stop();
       } catch (e) {
         console.log("Gyroscope not available:", e);
+      }
+    }
+
+    // Check magnetometer
+    if ("Magnetometer" in window) {
+      try {
+        const mag = new (window as any).Magnetometer({ frequency: 10 });
+        status.magnetometer = true;
+        mag.stop();
+      } catch (e) {
+        console.log("Magnetometer not available:", e);
+      }
+    }
+
+    // Check linear acceleration
+    if ("LinearAccelerationSensor" in window) {
+      try {
+        const linear = new (window as any).LinearAccelerationSensor({
+          frequency: 10,
+        });
+        status.linear_acceleration = true;
+        linear.stop();
+      } catch (e) {
+        console.log("LinearAccelerationSensor not available:", e);
+      }
+    }
+
+    // Check gravity
+    if ("GravitySensor" in window) {
+      try {
+        const grav = new (window as any).GravitySensor({ frequency: 10 });
+        status.gravity = true;
+        grav.stop();
+      } catch (e) {
+        console.log("GravitySensor not available:", e);
+      }
+    }
+
+    // Check absolute orientation
+    if ("AbsoluteOrientationSensor" in window) {
+      try {
+        const absOrient = new (window as any).AbsoluteOrientationSensor({
+          frequency: 10,
+        });
+        status.absolute_orientation = true;
+        absOrient.stop();
+      } catch (e) {
+        console.log("AbsoluteOrientationSensor not available:", e);
+      }
+    }
+
+    // Check relative orientation
+    if ("RelativeOrientationSensor" in window) {
+      try {
+        const relOrient = new (window as any).RelativeOrientationSensor({
+          frequency: 10,
+        });
+        status.relative_orientation = true;
+        relOrient.stop();
+      } catch (e) {
+        console.log("RelativeOrientationSensor not available:", e);
+      }
+    }
+
+    // Check ambient light
+    if ("AmbientLightSensor" in window) {
+      try {
+        const light = new (window as any).AmbientLightSensor({ frequency: 1 });
+        status.ambient_light = true;
+        light.stop();
+      } catch (e) {
+        console.log("AmbientLightSensor not available:", e);
       }
     }
 
@@ -78,6 +174,15 @@ export const useSensors = (
     const currentSensors = sensorsRef.current;
     if (currentSensors.accelerometer) currentSensors.accelerometer.stop();
     if (currentSensors.gyroscope) currentSensors.gyroscope.stop();
+    if (currentSensors.magnetometer) currentSensors.magnetometer.stop();
+    if (currentSensors.linear_acceleration)
+      currentSensors.linear_acceleration.stop();
+    if (currentSensors.gravity) currentSensors.gravity.stop();
+    if (currentSensors.absolute_orientation)
+      currentSensors.absolute_orientation.stop();
+    if (currentSensors.relative_orientation)
+      currentSensors.relative_orientation.stop();
+    if (currentSensors.ambient_light) currentSensors.ambient_light.stop();
     if (currentSensors.geolocationWatchId !== undefined) {
       navigator.geolocation.clearWatch(currentSensors.geolocationWatchId);
     }
@@ -128,6 +233,123 @@ export const useSensors = (
       }
     }
 
+    // Start magnetometer
+    if (sensorStatus.magnetometer && "Magnetometer" in window) {
+      try {
+        const mag = new (window as any).Magnetometer({ frequency: 10 });
+        mag.addEventListener("reading", () => {
+          onSensorDataRef.current("magnetometer", {
+            x: mag.x,
+            y: mag.y,
+            z: mag.z,
+          });
+        });
+        mag.start();
+        newSensors.magnetometer = mag;
+      } catch (e) {
+        console.error("Error starting magnetometer:", e);
+      }
+    }
+
+    // Start linear acceleration
+    if (
+      sensorStatus.linear_acceleration &&
+      "LinearAccelerationSensor" in window
+    ) {
+      try {
+        const linear = new (window as any).LinearAccelerationSensor({
+          frequency: 10,
+        });
+        linear.addEventListener("reading", () => {
+          onSensorDataRef.current("linear_acceleration", {
+            x: linear.x,
+            y: linear.y,
+            z: linear.z,
+          });
+        });
+        linear.start();
+        newSensors.linear_acceleration = linear;
+      } catch (e) {
+        console.error("Error starting linear acceleration:", e);
+      }
+    }
+
+    // Start gravity
+    if (sensorStatus.gravity && "GravitySensor" in window) {
+      try {
+        const grav = new (window as any).GravitySensor({ frequency: 10 });
+        grav.addEventListener("reading", () => {
+          onSensorDataRef.current("gravity", {
+            x: grav.x,
+            y: grav.y,
+            z: grav.z,
+          });
+        });
+        grav.start();
+        newSensors.gravity = grav;
+      } catch (e) {
+        console.error("Error starting gravity:", e);
+      }
+    }
+
+    // Start absolute orientation
+    if (
+      sensorStatus.absolute_orientation &&
+      "AbsoluteOrientationSensor" in window
+    ) {
+      try {
+        const absOrient = new (window as any).AbsoluteOrientationSensor({
+          frequency: 10,
+        });
+        absOrient.addEventListener("reading", () => {
+          onSensorDataRef.current("absolute_orientation", {
+            quaternion: absOrient.quaternion,
+          });
+        });
+        absOrient.start();
+        newSensors.absolute_orientation = absOrient;
+      } catch (e) {
+        console.error("Error starting absolute orientation:", e);
+      }
+    }
+
+    // Start relative orientation
+    if (
+      sensorStatus.relative_orientation &&
+      "RelativeOrientationSensor" in window
+    ) {
+      try {
+        const relOrient = new (window as any).RelativeOrientationSensor({
+          frequency: 10,
+        });
+        relOrient.addEventListener("reading", () => {
+          onSensorDataRef.current("relative_orientation", {
+            quaternion: relOrient.quaternion,
+          });
+        });
+        relOrient.start();
+        newSensors.relative_orientation = relOrient;
+      } catch (e) {
+        console.error("Error starting relative orientation:", e);
+      }
+    }
+
+    // Start ambient light
+    if (sensorStatus.ambient_light && "AmbientLightSensor" in window) {
+      try {
+        const light = new (window as any).AmbientLightSensor({ frequency: 1 });
+        light.addEventListener("reading", () => {
+          onSensorDataRef.current("ambient_light", {
+            illuminance: light.illuminance,
+          });
+        });
+        light.start();
+        newSensors.ambient_light = light;
+      } catch (e) {
+        console.error("Error starting ambient light:", e);
+      }
+    }
+
     // Start geolocation
     if (sensorStatus.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
@@ -157,6 +379,14 @@ export const useSensors = (
     return () => {
       if (newSensors.accelerometer) newSensors.accelerometer.stop();
       if (newSensors.gyroscope) newSensors.gyroscope.stop();
+      if (newSensors.magnetometer) newSensors.magnetometer.stop();
+      if (newSensors.linear_acceleration) newSensors.linear_acceleration.stop();
+      if (newSensors.gravity) newSensors.gravity.stop();
+      if (newSensors.absolute_orientation)
+        newSensors.absolute_orientation.stop();
+      if (newSensors.relative_orientation)
+        newSensors.relative_orientation.stop();
+      if (newSensors.ambient_light) newSensors.ambient_light.stop();
       if (newSensors.geolocationWatchId !== undefined) {
         navigator.geolocation.clearWatch(newSensors.geolocationWatchId);
       }
