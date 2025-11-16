@@ -2,7 +2,17 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Video, VideoOff, Camera, Activity } from "lucide-react";
+import {
+  ArrowLeft,
+  Video,
+  VideoOff,
+  Camera,
+  Activity,
+  Navigation,
+  Compass,
+  Sun,
+  Gauge,
+} from "lucide-react";
 import { useRecording } from "@/hooks/useRecording";
 import { useSensors } from "@/hooks/useSensors";
 import { supabase } from "@/integrations/supabase/client";
@@ -164,17 +174,6 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
     });
   };
 
-  const sensorsOk =
-    sensorStatus.accelerometer ||
-    sensorStatus.gyroscope ||
-    sensorStatus.geolocation ||
-    sensorStatus.magnetometer ||
-    sensorStatus.linear_acceleration ||
-    sensorStatus.gravity ||
-    sensorStatus.absolute_orientation ||
-    sensorStatus.relative_orientation ||
-    sensorStatus.ambient_light;
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -188,7 +187,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
       </div>
 
       {/* Status Bar */}
-      <div className="bg-card border-b p-3 flex items-center justify-around">
+      <div className="bg-card border-b p-3 flex flex-wrap items-center gap-2">
         <Badge
           variant={cameraReady ? "default" : "secondary"}
           className="flex items-center gap-1"
@@ -196,13 +195,51 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
           <Camera className="h-3 w-3" />
           Camera {cameraReady ? "OK" : "Not Ready"}
         </Badge>
-        <Badge
-          variant={sensorsOk ? "default" : "secondary"}
-          className="flex items-center gap-1"
-        >
-          <Activity className="h-3 w-3" />
-          Sensors {sensorsOk ? "OK" : "Limited"}
-        </Badge>
+        {sensorStatus.accelerometer && (
+          <Badge
+            variant={cameraReady ? "default" : "secondary"}
+            className="flex items-center gap-1"
+          >
+            <Activity className="h-3 w-3" />
+            Accelerometer
+          </Badge>
+        )}
+        {sensorStatus.gyroscope && (
+          <Badge
+            variant={cameraReady ? "default" : "secondary"}
+            className="flex items-center gap-1"
+          >
+            <Gauge className="h-3 w-3" />
+            Gyroscope
+          </Badge>
+        )}
+        {sensorStatus.geolocation && (
+          <Badge
+            variant={cameraReady ? "default" : "secondary"}
+            className="flex items-center gap-1"
+          >
+            <Navigation className="h-3 w-3" />
+            Geolocation
+          </Badge>
+        )}
+        {sensorStatus.magnetometer && (
+          <Badge
+            variant={cameraReady ? "default" : "secondary"}
+            className="flex items-center gap-1"
+          >
+            <Compass className="h-3 w-3" />
+            Magnetometer
+          </Badge>
+        )}
+        {sensorStatus.ambient_light && (
+          <Badge
+            variant={cameraReady ? "default" : "secondary"}
+            className="flex items-center gap-1"
+          >
+            <Sun className="h-3 w-3" />
+            Ambient Light
+          </Badge>
+        )}
         {isRecording && (
           <Badge variant="destructive" className="animate-pulse">
             <div className="h-2 w-2 rounded-full bg-recording-foreground mr-2" />
