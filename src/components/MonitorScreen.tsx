@@ -19,8 +19,8 @@ interface Event {
   id: string;
   timestamp: string;
   offset_ms: number;
-  event_type: {
-    label: string;
+  event_code: {
+    e_description_butt: string;
   };
 }
 
@@ -68,8 +68,8 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
               id,
               timestamp,
               offset_ms,
-              event_type:event_types (
-                label
+              event_code:event_codes (
+                e_description_butt
               )
             `
             )
@@ -154,13 +154,13 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
           `
           id,
           recording_id,
-          event_type_id,
+          event_code_id,
           timestamp,
           offset_ms,
           metadata,
           created_at,
-          event_type:event_types (
-            label
+          event_code:event_codes (
+            e_description_butt
           )
         `
         )
@@ -181,8 +181,8 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
       const exportData = eventsData.map((event) => ({
         id: event.id,
         recording_id: event.recording_id,
-        event_type_id: event.event_type_id,
-        event_type_label: event.event_type?.label || "",
+        event_code_id: event.event_code_id,
+        event_code_label: event.event_code?.e_description_butt || "",
         timestamp: event.timestamp,
         offset_ms: event.offset_ms,
         metadata: JSON.stringify(event.metadata),
@@ -323,7 +323,8 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
                           className="flex items-center justify-between text-xs"
                         >
                           <span className="text-muted-foreground">
-                            {event.event_type?.label || "Unknown Event"}
+                            {event.event_code?.e_description_butt ||
+                              "Unknown Event"}
                           </span>
                           <span className="font-mono text-muted-foreground">
                             {formatTimestamp(event.offset_ms)}

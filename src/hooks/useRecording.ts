@@ -183,7 +183,7 @@ export const useRecording = () => {
   }, [recordingId, recordingStartTime, recordingWithVideo]);
 
   const logEvent = useCallback(
-    async (eventTypeId: string) => {
+    async (eventCodeId: string) => {
       if (!recordingId || !recordingStartTime) return;
 
       const now = Date.now();
@@ -192,7 +192,7 @@ export const useRecording = () => {
       try {
         const { error } = await supabase.from("events").insert({
           recording_id: recordingId,
-          event_type_id: eventTypeId,
+          event_code_id: eventCodeId,
           timestamp: new Date().toISOString(),
           offset_ms: offsetMs,
         });

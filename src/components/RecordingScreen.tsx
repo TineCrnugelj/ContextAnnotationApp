@@ -16,11 +16,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-interface EventType {
+interface EventCode {
   id: string;
-  code: string;
-  label: string;
-  display_order: number;
+  e_ind: number;
+  e_description_engl: string;
+  e_description_slo: string;
+  e_id: string;
+  e_description_butt: string;
+  notes: string | null;
+  enabled: boolean;
 }
 
 interface RecordingScreenProps {
@@ -31,7 +35,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
-  const [eventTypes, setEventTypes] = useState<EventType[]>([]);
+  const [eventCodes, setEventCodes] = useState<EventCode[]>([]);
   const [eventCount, setEventCount] = useState(0);
   const [showVideoDialog, setShowVideoDialog] = useState(false);
 
@@ -59,28 +63,28 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
   const sensorStatus = useSensors(isRecording, handleSensorData);
 
   useEffect(() => {
-    // Load event types
-    const loadEventTypes = async () => {
+    // Load event codes
+    const loadEventCodes = async () => {
       const { data, error } = await supabase
-        .from("event_types")
+        .from("event_codes")
         .select("*")
         .eq("enabled", true)
-        .order("display_order");
+        .order("e_ind");
 
       if (error) {
-        console.error("Error loading event types:", error);
+        console.error("Error loading event codes:", error);
         toast({
           title: "Error",
-          description: "Failed to load event types",
+          description: "Failed to load event codes",
           variant: "destructive",
         });
         return;
       }
 
-      setEventTypes(data || []);
+      setEventCodes(data || []);
     };
 
-    loadEventTypes();
+    loadEventCodes();
 
     // Request camera access
     const initCamera = async () => {
@@ -146,16 +150,16 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
     }
   };
 
-  const handleEventClick = (eventTypeId: string) => {
+  const handleEventClick = (eventCodeId: string) => {
     if (!isRecording) return;
-    logEvent(eventTypeId);
+    logEvent(eventCodeId);
     setEventCount((prev) => prev + 1);
 
     // Visual feedback
-    const eventType = eventTypes.find((e) => e.id === eventTypeId);
+    const eventCode = eventCodes.find((e) => e.id === eventCodeId);
     toast({
       title: "Event Logged",
-      description: eventType?.label || "Event",
+      description: eventCode?.e_description_butt || "Event",
       duration: 1000,
     });
   };
@@ -227,7 +231,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
             <Badge variant="outline">{eventCount} events logged</Badge>
           </div>
           <div className="grid grid-cols-4 gap-2">
-            {eventTypes.slice(0, 16).map((event) => (
+            {eventCodes.slice(0, 16).map((event) => (
               <Button
                 key={event.id}
                 variant="outline"
@@ -235,7 +239,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
                 onClick={() => handleEventClick(event.id)}
                 disabled={!isRecording}
               >
-                {event.label}
+                {event.e_description_butt}
               </Button>
             ))}
           </div>
