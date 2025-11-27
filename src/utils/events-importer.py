@@ -13,16 +13,19 @@ SUPABASE_KEY = os.getenv("VITE_SUPABASE_PUBLISHABLE_KEY")
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+events_file_nm = 'ContextAnnotationApp/src/utils/sample-data/EventCodes_v01.xlsx'
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Import gesture events to Supabase")
-    parser.add_argument("xlsx_path", help="Path to the XLSX file")
-    args = parser.parse_args()
+    #parser = argparse.ArgumentParser(description="Import gesture events to Supabase")
+    #parser.add_argument("xlsx_path", help="Path to the XLSX file")
+    #args = parser.parse_args()
 
     # Read XLSX file
-    df = pd.read_excel(args.xlsx_path)
+    #df = pd.read_excel(args.xlsx_path)
+    X_df = pd.read_excel(events_file_nm)
 
     # Iterate over rows and insert into Supabase
-    for _, row in df.iterrows():
+    for _, row in X_df.iterrows():
         event_data = {
             "e_ind": row["eInd"],
             "e_description_engl": row["eDescriptionENGL"],
