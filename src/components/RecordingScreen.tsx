@@ -35,6 +35,7 @@ interface EventCode {
   e_description_butt: string;
   notes: string | null;
   enabled: boolean;
+  e_active: "Y" | "N";
 }
 
 interface RecordingScreenProps {
@@ -268,17 +269,20 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
             <Badge variant="outline">{eventCount} events logged</Badge>
           </div>
           <div className="grid grid-cols-4 gap-2">
-            {eventCodes.slice(0, 16).map((event) => (
-              <Button
-                key={event.id}
-                variant="outline"
-                className="h-20 p-2 text-xs font-medium hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-50"
-                onClick={() => handleEventClick(event.id)}
-                disabled={!isRecording}
-              >
-                {event.e_description_butt}
-              </Button>
-            ))}
+            {eventCodes.map(
+              (event) =>
+                event.e_active === "Y" && (
+                  <Button
+                    key={event.id}
+                    variant="outline"
+                    className="h-20 p-2 text-xs font-medium hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-50"
+                    onClick={() => handleEventClick(event.id)}
+                    disabled={!isRecording}
+                  >
+                    {event.e_description_butt}
+                  </Button>
+                )
+            )}
           </div>
         </Card>
       </div>
