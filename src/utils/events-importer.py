@@ -33,6 +33,7 @@ if __name__ == "__main__":
             "e_id": row["eID"],
             "e_description_butt": row["eDescriptionButt"],
             "notes": row["Notes"],
+            "e_active": "Y"
         }
         # Replace NaN or infinite values with None
         for k, v in event_data.items():
