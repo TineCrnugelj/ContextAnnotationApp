@@ -103,8 +103,8 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 640 },
+            height: { ideal: 360 },
           },
           audio: true,
         });
