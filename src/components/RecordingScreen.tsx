@@ -165,14 +165,6 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
     if (!isRecording) return;
     logEvent(eventCodeId);
     setEventCount((prev) => prev + 1);
-
-    // Visual feedback
-    const eventCode = eventCodes.find((e) => e.id === eventCodeId);
-    toast({
-      title: "Event Logged",
-      description: eventCode?.e_description_butt || "Event",
-      duration: 1000,
-    });
   };
 
   return (

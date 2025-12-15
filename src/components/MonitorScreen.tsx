@@ -14,6 +14,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
+import { Dialog, DialogDescription, DialogTitle } from "@radix-ui/react-dialog";
+import { DialogContent, DialogFooter, DialogHeader } from "./ui/dialog";
 
 interface Event {
   id: string;
@@ -44,6 +46,11 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(
     null
   );
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [recordingToDelete, setRecordingToDelete] = useState<{
+    id: string;
+    videoUrl: string | null;
+  } | null>(null);
 
   useEffect(() => {
     loadRecordings();
@@ -211,11 +218,21 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
     }
   };
 
-  const handleDelete = async (recordingId: string, videoUrl: string | null) => {
+  const showDeleteConfirmationDialog = (
+    recordingId: string,
+    videoUrl: string | null
+  ) => {
+    setRecordingToDelete({ id: recordingId, videoUrl });
+    setShowDeleteDialog(true);
+  };
+
+  const handleDelete = async () => {
+    if (!recordingToDelete) return;
+
     try {
       // Delete video file from storage if it exists
-      if (videoUrl) {
-        const fileName = `${recordingId}.webm`;
+      if (recordingToDelete.videoUrl) {
+        const fileName = `${recordingToDelete.id}.webm`;
         const { error: storageError } = await supabase.storage
           .from("recordings")
           .remove([fileName]);
@@ -229,7 +246,7 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
       const { error: eventsError } = await supabase
         .from("events")
         .delete()
-        .eq("recording_id", recordingId);
+        .eq("recording_id", recordingToDelete.id);
 
       if (eventsError) throw eventsError;
 
@@ -237,17 +254,20 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
       const { error: recordingError } = await supabase
         .from("recordings")
         .delete()
-        .eq("id", recordingId);
+        .eq("id", recordingToDelete.id);
 
       if (recordingError) throw recordingError;
 
       // Update local state
-      setRecordings(recordings.filter((r) => r.id !== recordingId));
+      setRecordings(recordings.filter((r) => r.id !== recordingToDelete.id));
 
       toast({
         title: "Recording deleted",
         description: "Recording and associated events have been removed",
       });
+
+      setShowDeleteDialog(false);
+      setRecordingToDelete(null);
     } catch (error) {
       console.error("Error deleting recording:", error);
       toast({
@@ -371,7 +391,10 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
                     variant="destructive"
                     size="sm"
                     onClick={() =>
-                      handleDelete(recording.id, recording.video_url)
+                      showDeleteConfirmationDialog(
+                        recording.id,
+                        recording.video_url
+                      )
                     }
                   >
                     <Trash2 className="h-4 w-4" />
@@ -405,6 +428,33 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
           </Card>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Recording?</DialogTitle>
+            <DialogDescription>
+              Do you want to delete video along with event annotations?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteDialog(false);
+                setRecordingToDelete(null);
+              }}
+              className="w-full sm:w-auto"
+            >
+              No
+            </Button>
+            <Button onClick={handleDelete} className="w-full sm:w-auto">
+              Yes, Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
