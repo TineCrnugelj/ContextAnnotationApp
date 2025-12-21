@@ -4,6 +4,7 @@ import { toast } from "@/hooks/use-toast";
 
 export const useRecording = () => {
   const [isRecording, setIsRecording] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(
     null
@@ -75,6 +76,8 @@ export const useRecording = () => {
   const stopRecording = useCallback(async () => {
     if (!recordingId || !recordingStartTime) return;
 
+    setIsSaving(true);
+
     try {
       const durationSeconds = Math.floor(
         (Date.now() - recordingStartTime) / 1000
@@ -133,6 +136,7 @@ export const useRecording = () => {
               setRecordingId(null);
               setRecordingStartTime(null);
               setRecordingWithVideo(false);
+              setIsSaving(false);
               videoChunksRef.current = [];
 
               resolve();
@@ -143,6 +147,7 @@ export const useRecording = () => {
                 description: "Failed to save recording",
                 variant: "destructive",
               });
+              setIsSaving(false);
               resolve();
             }
           };
@@ -171,6 +176,7 @@ export const useRecording = () => {
         setRecordingId(null);
         setRecordingStartTime(null);
         setRecordingWithVideo(false);
+        setIsSaving(false);
       }
     } catch (error) {
       console.error("Error stopping recording:", error);
@@ -179,6 +185,7 @@ export const useRecording = () => {
         description: "Failed to save recording",
         variant: "destructive",
       });
+      setIsSaving(false);
     }
   }, [recordingId, recordingStartTime, recordingWithVideo]);
 
@@ -231,6 +238,7 @@ export const useRecording = () => {
 
   return {
     isRecording,
+    isSaving,
     recordingId,
     startRecording,
     stopRecording,

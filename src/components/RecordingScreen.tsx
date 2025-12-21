@@ -52,6 +52,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
   const {
     isRecording,
+    isSaving,
     startRecording,
     stopRecording,
     logEvent,
@@ -283,12 +284,14 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
       <div className="bg-card border-t p-4">
         <Button
           onClick={handleStartStop}
-          disabled={!cameraReady}
+          disabled={!cameraReady || isSaving}
           size="lg"
           variant={isRecording ? "destructive" : "default"}
           className="w-full h-14 text-lg font-semibold"
         >
-          {isRecording ? (
+          {isSaving ? (
+            <>Saving...</>
+          ) : isRecording ? (
             <>
               <VideoOff className="mr-2 h-5 w-5" />
               Stop Recording
