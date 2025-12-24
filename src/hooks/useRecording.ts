@@ -38,7 +38,7 @@ export const useRecording = () => {
         if (withVideo) {
           // Set up media recorder
           const mediaRecorder = new MediaRecorder(stream, {
-            mimeType: "video/webm;codecs=vp9",
+            mimeType: "video/webm;codecs=vp8",
           });
 
           videoChunksRef.current = [];
@@ -49,7 +49,7 @@ export const useRecording = () => {
             }
           };
 
-          mediaRecorder.start(1000); // Capture in 1-second chunks
+          mediaRecorder.start(); // Capture in 1-second chunks
           mediaRecorderRef.current = mediaRecorder;
         }
 
@@ -95,15 +95,26 @@ export const useRecording = () => {
               });
               const fileName = `${recordingId}.webm`;
 
-              // Upload to Supabase Storage
-              const { error: uploadError } = await supabase.storage
-                .from("recordings")
-                .upload(fileName, videoBlob, {
-                  contentType: "video/webm",
-                  upsert: true,
-                });
+              // 1. Create signed upload URL
+              const { data: uploadData, error: signedUploadError } =
+                await supabase.storage
+                  .from("recordings")
+                  .createSignedUploadUrl(fileName);
 
-              if (uploadError) throw uploadError;
+              if (signedUploadError) throw signedUploadError;
+
+              // 2. Upload directly to Storage
+              const uploadResponse = await fetch(uploadData.signedUrl, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "video/webm",
+                },
+                body: videoBlob,
+              });
+
+              if (!uploadResponse.ok) {
+                throw new Error("Failed to upload video");
+              }
 
               // Get signed URL (valid for 1 year)
               const { data: signedUrlData, error: signedUrlError } =
