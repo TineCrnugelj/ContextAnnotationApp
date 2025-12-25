@@ -72,7 +72,10 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
     }
   };
 
-  const sensorStatus = useSensors(isRecording, handleSensorData);
+  const { sensorStatus, stopAllSensors } = useSensors(
+    isRecording,
+    handleSensorData
+  );
 
   useEffect(() => {
     // Load event codes
@@ -139,7 +142,9 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
   const handleStartStop = async () => {
     if (isRecording) {
+      stopAllSensors();
       await stopRecording();
+
       setEventCount(0);
     } else {
       setShowVideoDialog(true);

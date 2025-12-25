@@ -8,7 +8,6 @@ interface SensorStatus {
   magnetometer: boolean;
   linear_acceleration: boolean;
   gravity: boolean;
-  absolute_orientation: boolean;
   relative_orientation: boolean;
   ambient_light: boolean;
 }
@@ -25,7 +24,6 @@ export const useSensors = (
     magnetometer: false,
     linear_acceleration: false,
     gravity: false,
-    absolute_orientation: false,
     relative_orientation: false,
     ambient_light: false,
   });
@@ -36,7 +34,6 @@ export const useSensors = (
     magnetometer?: any;
     linear_acceleration?: any;
     gravity?: any;
-    absolute_orientation?: any;
     relative_orientation?: any;
     ambient_light?: any;
     geolocationWatchId?: number;
@@ -51,7 +48,6 @@ export const useSensors = (
       magnetometer: false,
       linear_acceleration: false,
       gravity: false,
-      absolute_orientation: false,
       relative_orientation: false,
       ambient_light: false,
     };
@@ -113,19 +109,6 @@ export const useSensors = (
       }
     }
 
-    // Check absolute orientation
-    if ("AbsoluteOrientationSensor" in window) {
-      try {
-        const absOrient = new (window as any).AbsoluteOrientationSensor({
-          frequency: 10,
-        });
-        status.absolute_orientation = true;
-        absOrient.stop();
-      } catch (e) {
-        console.log("AbsoluteOrientationSensor not available:", e);
-      }
-    }
-
     // Check relative orientation
     if ("RelativeOrientationSensor" in window) {
       try {
@@ -172,14 +155,14 @@ export const useSensors = (
 
   const stopAllSensors = useCallback(() => {
     const currentSensors = sensorsRef.current;
+    console.log(currentSensors);
+    console.log("stopping sensors");
     if (currentSensors.accelerometer) currentSensors.accelerometer.stop();
     if (currentSensors.gyroscope) currentSensors.gyroscope.stop();
     if (currentSensors.magnetometer) currentSensors.magnetometer.stop();
     if (currentSensors.linear_acceleration)
       currentSensors.linear_acceleration.stop();
     if (currentSensors.gravity) currentSensors.gravity.stop();
-    if (currentSensors.absolute_orientation)
-      currentSensors.absolute_orientation.stop();
     if (currentSensors.relative_orientation)
       currentSensors.relative_orientation.stop();
     if (currentSensors.ambient_light) currentSensors.ambient_light.stop();
@@ -292,27 +275,6 @@ export const useSensors = (
       }
     }
 
-    // Start absolute orientation
-    if (
-      sensorStatus.absolute_orientation &&
-      "AbsoluteOrientationSensor" in window
-    ) {
-      try {
-        const absOrient = new (window as any).AbsoluteOrientationSensor({
-          frequency: 10,
-        });
-        absOrient.addEventListener("reading", () => {
-          onSensorDataRef.current("absolute_orientation", {
-            quaternion: absOrient.quaternion,
-          });
-        });
-        absOrient.start();
-        newSensors.absolute_orientation = absOrient;
-      } catch (e) {
-        console.error("Error starting absolute orientation:", e);
-      }
-    }
-
     // Start relative orientation
     if (
       sensorStatus.relative_orientation &&
@@ -382,8 +344,6 @@ export const useSensors = (
       if (newSensors.magnetometer) newSensors.magnetometer.stop();
       if (newSensors.linear_acceleration) newSensors.linear_acceleration.stop();
       if (newSensors.gravity) newSensors.gravity.stop();
-      if (newSensors.absolute_orientation)
-        newSensors.absolute_orientation.stop();
       if (newSensors.relative_orientation)
         newSensors.relative_orientation.stop();
       if (newSensors.ambient_light) newSensors.ambient_light.stop();
@@ -393,5 +353,5 @@ export const useSensors = (
     };
   }, [isRecording, sensorStatus, stopAllSensors]);
 
-  return sensorStatus;
+  return { sensorStatus, stopAllSensors };
 };
