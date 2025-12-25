@@ -15,6 +15,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
+import { Dialog, DialogDescription, DialogTitle } from "@radix-ui/react-dialog";
+import { DialogContent, DialogFooter, DialogHeader } from "./ui/dialog";
 
 interface Event {
   id: string;
@@ -53,6 +55,12 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
     null
   );
   const [loadingVideo, setLoadingVideo] = useState<string | null>(null);
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [recordingToDelete, setRecordingToDelete] = useState<{
+    id: string;
+    videoUrl: string | null;
+  } | null>(null);
 
   useEffect(() => {
     loadRecordings();
@@ -309,11 +317,20 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
     }
   };
 
-  const handleDelete = async (recording: Recording) => {
+  const showDeleteConfirmationDialog = (
+    recordingId: string,
+    videoUrl: string | null
+  ) => {
+    setRecordingToDelete({ id: recordingId, videoUrl });
+    setShowDeleteDialog(true);
+  };
+
+  const handleDelete = async () => {
+    if (!recordingToDelete) return;
+
     try {
-      // Delete video file(s) from storage
-      if (recording.video_url) {
-        const fileName = `${recording.id}.webm`;
+      if (recordingToDelete.videoUrl) {
+        const fileName = `${recordingToDelete.id}.webm`;
         const { error: storageError } = await supabase.storage
           .from("recordings")
           .remove([fileName]);
@@ -321,22 +338,13 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
         if (storageError) {
           console.error("Error deleting video file:", storageError);
         }
-      } else if (hasChunkedVideo(recording)) {
-        const chunks = recording.metadata!.chunks!;
-        const { error: storageError } = await supabase.storage
-          .from("recordings")
-          .remove(chunks);
-
-        if (storageError) {
-          console.error("Error deleting video chunks:", storageError);
-        }
       }
 
       // Delete events (should cascade automatically if foreign key is set up)
       const { error: eventsError } = await supabase
         .from("events")
         .delete()
-        .eq("recording_id", recording.id);
+        .eq("recording_id", recordingToDelete.id);
 
       if (eventsError) throw eventsError;
 
@@ -344,17 +352,20 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
       const { error: recordingError } = await supabase
         .from("recordings")
         .delete()
-        .eq("id", recording.id);
+        .eq("id", recordingToDelete.id);
 
       if (recordingError) throw recordingError;
 
       // Update local state
-      setRecordings(recordings.filter((r) => r.id !== recording.id));
+      setRecordings(recordings.filter((r) => r.id !== recordingToDelete.id));
 
       toast({
         title: "Recording deleted",
         description: "Recording and associated events have been removed",
       });
+
+      setShowDeleteDialog(false);
+      setRecordingToDelete(null);
     } catch (error) {
       console.error("Error deleting recording:", error);
       toast({
@@ -481,7 +492,12 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => handleDelete(recording)}
+                    onClick={() =>
+                      showDeleteConfirmationDialog(
+                        recording.id,
+                        recording.video_url
+                      )
+                    }
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -517,6 +533,33 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
             </Card>
           </div>
         )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Recording?</DialogTitle>
+            <DialogDescription>
+              Do you want to delete video along with event annotations?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteDialog(false);
+                setRecordingToDelete(null);
+              }}
+              className="w-full sm:w-auto"
+            >
+              No
+            </Button>
+            <Button onClick={handleDelete} className="w-full sm:w-auto">
+              Yes, Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
