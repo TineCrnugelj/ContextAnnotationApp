@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,9 @@ import {
   Compass,
   Sun,
   Gauge,
+  Loader2,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { useRecording } from "@/hooks/useRecording";
 import { useSensors } from "@/hooks/useSensors";
@@ -46,6 +49,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
   const [eventCodes, setEventCodes] = useState<EventCode[]>([]);
   const [eventCount, setEventCount] = useState(0);
   const [showVideoDialog, setShowVideoDialog] = useState(false);
@@ -59,23 +63,51 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
     logSensorData,
   } = useRecording();
 
-  const handleSensorData = async (sensorType: string, data: any) => {
-    // Get sensor type ID
-    const { data: sensorTypeData } = await supabase
-      .from("sensor_types")
-      .select("id")
-      .eq("name", sensorType)
-      .single();
+  // Cache sensor type ids (avoid a DB lookup on every sensor reading)
+  const sensorTypeIdByNameRef = useRef<Record<string, string>>({});
+  const sensorTypesLoadingRef = useRef<Promise<void> | null>(null);
 
-    if (sensorTypeData) {
-      logSensorData(sensorTypeData.id, data);
-    }
-  };
+  const ensureSensorTypesLoaded = useCallback(async () => {
+    if (Object.keys(sensorTypeIdByNameRef.current).length > 0) return;
+    if (sensorTypesLoadingRef.current) return sensorTypesLoadingRef.current;
 
-  const { sensorStatus, stopAllSensors } = useSensors(
-    isRecording,
-    handleSensorData
+    sensorTypesLoadingRef.current = (async () => {
+      const { data, error } = await supabase
+        .from("sensor_types")
+        .select("id,name");
+
+      if (error) {
+        console.error("Error loading sensor types:", error);
+        return;
+      }
+
+      const map: Record<string, string> = {};
+      for (const row of data ?? []) {
+        map[row.name] = row.id;
+      }
+      sensorTypeIdByNameRef.current = map;
+    })().finally(() => {
+      sensorTypesLoadingRef.current = null;
+    });
+
+    return sensorTypesLoadingRef.current;
+  }, []);
+
+  const handleSensorData = useCallback(
+    async (sensorType: string, data: any) => {
+      // Extra guard: as soon as Stop is pressed, ignore anything still coming in.
+      if (!isRecording) return;
+
+      await ensureSensorTypesLoaded();
+      const sensorTypeId = sensorTypeIdByNameRef.current[sensorType];
+      if (!sensorTypeId) return;
+
+      logSensorData(sensorTypeId, data);
+    },
+    [ensureSensorTypesLoaded, isRecording, logSensorData]
   );
+
+  const sensorStatus = useSensors(isRecording, handleSensorData);
 
   useEffect(() => {
     // Load event codes
@@ -101,16 +133,20 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
     loadEventCodes();
 
-    // Request camera access
+    // Request camera and audio access
     const initCamera = async () => {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "environment",
-            width: { ideal: 640 },
-            height: { ideal: 360 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           },
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
         });
 
         setStream(mediaStream);
@@ -119,13 +155,29 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
           videoRef.current.srcObject = mediaStream;
         }
 
-        setCameraReady(true);
+        const audioTracks = mediaStream.getAudioTracks();
+        const videoTracks = mediaStream.getVideoTracks();
+
+        console.log("Audio tracks available:", audioTracks.length);
+        console.log("Video tracks available:", videoTracks.length);
+
+        setCameraReady(videoTracks.length > 0);
+        setAudioReady(audioTracks.length > 0);
+
+        if (audioTracks.length === 0) {
+          toast({
+            title: "Audio Warning",
+            description:
+              "No microphone detected. Video will be recorded without audio.",
+            variant: "destructive",
+          });
+        }
       } catch (error) {
         console.error("Error accessing camera:", error);
         toast({
           title: "Camera Error",
           description:
-            "Failed to access camera. Please grant camera permissions.",
+            "Failed to access camera/microphone. Please grant permissions.",
           variant: "destructive",
         });
       }
@@ -142,9 +194,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
   const handleStartStop = async () => {
     if (isRecording) {
-      stopAllSensors();
       await stopRecording();
-
       setEventCount(0);
     } else {
       setShowVideoDialog(true);
@@ -194,47 +244,43 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
           <Camera className="h-3 w-3" />
           Camera {cameraReady ? "OK" : "Not Ready"}
         </Badge>
-        {sensorStatus.accelerometer && (
-          <Badge
-            variant={cameraReady ? "default" : "secondary"}
-            className="flex items-center gap-1"
-          >
+        <Badge
+          variant={audioReady ? "default" : "destructive"}
+          className="flex items-center gap-1"
+        >
+          {audioReady ? (
+            <Mic className="h-3 w-3" />
+          ) : (
+            <MicOff className="h-3 w-3" />
+          )}
+          Audio {audioReady ? "OK" : "No Mic"}
+        </Badge>
+        {sensorStatus.sensorStatus.accelerometer && (
+          <Badge variant="secondary" className="flex items-center gap-1">
             <Activity className="h-3 w-3" />
             Accelerometer
           </Badge>
         )}
-        {sensorStatus.gyroscope && (
-          <Badge
-            variant={cameraReady ? "default" : "secondary"}
-            className="flex items-center gap-1"
-          >
+        {sensorStatus.sensorStatus.gyroscope && (
+          <Badge variant="secondary" className="flex items-center gap-1">
             <Gauge className="h-3 w-3" />
             Gyroscope
           </Badge>
         )}
-        {sensorStatus.geolocation && (
-          <Badge
-            variant={cameraReady ? "default" : "secondary"}
-            className="flex items-center gap-1"
-          >
+        {sensorStatus.sensorStatus.geolocation && (
+          <Badge variant="secondary" className="flex items-center gap-1">
             <Navigation className="h-3 w-3" />
             Geolocation
           </Badge>
         )}
-        {sensorStatus.magnetometer && (
-          <Badge
-            variant={cameraReady ? "default" : "secondary"}
-            className="flex items-center gap-1"
-          >
+        {sensorStatus.sensorStatus.magnetometer && (
+          <Badge variant="secondary" className="flex items-center gap-1">
             <Compass className="h-3 w-3" />
             Magnetometer
           </Badge>
         )}
-        {sensorStatus.ambient_light && (
-          <Badge
-            variant={cameraReady ? "default" : "secondary"}
-            className="flex items-center gap-1"
-          >
+        {sensorStatus.sensorStatus.ambient_light && (
+          <Badge variant="secondary" className="flex items-center gap-1">
             <Sun className="h-3 w-3" />
             Ambient Light
           </Badge>
@@ -267,7 +313,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
             <Badge variant="outline">{eventCount} events logged</Badge>
           </div>
           <div className="grid grid-cols-4 gap-2">
-            {eventCodes.map(
+            {eventCodes.slice(0, 16).map(
               (event) =>
                 event.e_active === "Y" && (
                   <Button
@@ -295,7 +341,10 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
           className="w-full h-14 text-lg font-semibold"
         >
           {isSaving ? (
-            <>Saving...</>
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Saving...
+            </>
           ) : isRecording ? (
             <>
               <VideoOff className="mr-2 h-5 w-5" />

@@ -10,12 +10,11 @@ import {
   Trash2,
   Download,
   FileSpreadsheet,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
-import { Dialog, DialogDescription, DialogTitle } from "@radix-ui/react-dialog";
-import { DialogContent, DialogFooter, DialogHeader } from "./ui/dialog";
 
 interface Event {
   id: string;
@@ -26,6 +25,11 @@ interface Event {
   };
 }
 
+interface RecordingMetadata {
+  chunks?: string[];
+  totalChunks?: number;
+}
+
 interface Recording {
   id: string;
   start_time: string;
@@ -33,7 +37,9 @@ interface Recording {
   duration_seconds: number | null;
   status: string;
   video_url: string | null;
+  metadata?: RecordingMetadata;
   events?: Event[];
+  blobUrl?: string;
 }
 
 interface MonitorScreenProps {
@@ -46,15 +52,45 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(
     null
   );
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [recordingToDelete, setRecordingToDelete] = useState<{
-    id: string;
-    videoUrl: string | null;
-  } | null>(null);
+  const [loadingVideo, setLoadingVideo] = useState<string | null>(null);
 
   useEffect(() => {
     loadRecordings();
   }, []);
+
+  const hasChunkedVideo = (recording: Recording) => {
+    return recording.metadata?.chunks && recording.metadata.chunks.length > 0;
+  };
+
+  const hasVideo = (recording: Recording) => {
+    return recording.video_url || hasChunkedVideo(recording);
+  };
+
+  const fetchChunkedVideo = async (
+    recording: Recording
+  ): Promise<string | null> => {
+    if (!recording.metadata?.chunks) return null;
+
+    try {
+      const chunks = recording.metadata.chunks;
+      const blobParts: Blob[] = [];
+
+      for (const chunkPath of chunks) {
+        const { data, error } = await supabase.storage
+          .from("recordings")
+          .download(chunkPath);
+
+        if (error) throw error;
+        blobParts.push(data);
+      }
+
+      const combinedBlob = new Blob(blobParts, { type: "video/webm" });
+      return URL.createObjectURL(combinedBlob);
+    } catch (error) {
+      console.error("Error fetching chunked video:", error);
+      return null;
+    }
+  };
 
   const loadRecordings = async () => {
     try {
@@ -85,10 +121,18 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
 
           if (eventsError) {
             console.error("Error loading events:", eventsError);
-            return { ...recording, events: [] };
+            return {
+              ...recording,
+              metadata: recording.metadata as RecordingMetadata | undefined,
+              events: [],
+            };
           }
 
-          return { ...recording, events: eventsData || [] };
+          return {
+            ...recording,
+            metadata: recording.metadata as RecordingMetadata | undefined,
+            events: eventsData || [],
+          };
         })
       );
 
@@ -126,14 +170,60 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
     )}`;
   };
 
-  const handleDownload = async (videoUrl: string, recordingId: string) => {
+  const handleViewVideo = async (recording: Recording) => {
+    if (recording.video_url) {
+      setSelectedRecording(recording);
+      return;
+    }
+
+    if (hasChunkedVideo(recording)) {
+      setLoadingVideo(recording.id);
+      const blobUrl = await fetchChunkedVideo(recording);
+      setLoadingVideo(null);
+
+      if (blobUrl) {
+        setSelectedRecording({ ...recording, blobUrl });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load video",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleDownload = async (recording: Recording) => {
     try {
-      const response = await fetch(videoUrl);
-      const blob = await response.blob();
+      let blob: Blob;
+
+      if (recording.video_url) {
+        const response = await fetch(recording.video_url);
+        blob = await response.blob();
+      } else if (hasChunkedVideo(recording)) {
+        setLoadingVideo(recording.id);
+        const chunks = recording.metadata!.chunks!;
+        const blobParts: Blob[] = [];
+
+        for (const chunkPath of chunks) {
+          const { data, error } = await supabase.storage
+            .from("recordings")
+            .download(chunkPath);
+
+          if (error) throw error;
+          blobParts.push(data);
+        }
+
+        blob = new Blob(blobParts, { type: "video/webm" });
+        setLoadingVideo(null);
+      } else {
+        return;
+      }
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `recording-${recordingId}.webm`;
+      link.download = `recording-${recording.id}.webm`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -145,6 +235,7 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
       });
     } catch (error) {
       console.error("Error downloading video:", error);
+      setLoadingVideo(null);
       toast({
         title: "Error",
         description: "Failed to download video",
@@ -218,21 +309,11 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
     }
   };
 
-  const showDeleteConfirmationDialog = (
-    recordingId: string,
-    videoUrl: string | null
-  ) => {
-    setRecordingToDelete({ id: recordingId, videoUrl });
-    setShowDeleteDialog(true);
-  };
-
-  const handleDelete = async () => {
-    if (!recordingToDelete) return;
-
+  const handleDelete = async (recording: Recording) => {
     try {
-      // Delete video file from storage if it exists
-      if (recordingToDelete.videoUrl) {
-        const fileName = `${recordingToDelete.id}.webm`;
+      // Delete video file(s) from storage
+      if (recording.video_url) {
+        const fileName = `${recording.id}.webm`;
         const { error: storageError } = await supabase.storage
           .from("recordings")
           .remove([fileName]);
@@ -240,13 +321,22 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
         if (storageError) {
           console.error("Error deleting video file:", storageError);
         }
+      } else if (hasChunkedVideo(recording)) {
+        const chunks = recording.metadata!.chunks!;
+        const { error: storageError } = await supabase.storage
+          .from("recordings")
+          .remove(chunks);
+
+        if (storageError) {
+          console.error("Error deleting video chunks:", storageError);
+        }
       }
 
       // Delete events (should cascade automatically if foreign key is set up)
       const { error: eventsError } = await supabase
         .from("events")
         .delete()
-        .eq("recording_id", recordingToDelete.id);
+        .eq("recording_id", recording.id);
 
       if (eventsError) throw eventsError;
 
@@ -254,20 +344,17 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
       const { error: recordingError } = await supabase
         .from("recordings")
         .delete()
-        .eq("id", recordingToDelete.id);
+        .eq("id", recording.id);
 
       if (recordingError) throw recordingError;
 
       // Update local state
-      setRecordings(recordings.filter((r) => r.id !== recordingToDelete.id));
+      setRecordings(recordings.filter((r) => r.id !== recording.id));
 
       toast({
         title: "Recording deleted",
         description: "Recording and associated events have been removed",
       });
-
-      setShowDeleteDialog(false);
-      setRecordingToDelete(null);
     } catch (error) {
       console.error("Error deleting recording:", error);
       toast({
@@ -356,23 +443,27 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
                 )}
 
                 <div className="flex gap-2 mt-3">
-                  {recording.video_url && (
+                  {hasVideo(recording) && (
                     <>
                       <Button
                         variant="outline"
                         size="sm"
                         className="flex-1"
-                        onClick={() => setSelectedRecording(recording)}
+                        onClick={() => handleViewVideo(recording)}
+                        disabled={loadingVideo === recording.id}
                       >
-                        <Play className="mr-2 h-4 w-4" />
+                        {loadingVideo === recording.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="mr-2 h-4 w-4" />
+                        )}
                         View
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          handleDownload(recording.video_url!, recording.id)
-                        }
+                        onClick={() => handleDownload(recording)}
+                        disabled={loadingVideo === recording.id}
                       >
                         <Download className="h-4 w-4" />
                       </Button>
@@ -390,12 +481,7 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() =>
-                      showDeleteConfirmationDialog(
-                        recording.id,
-                        recording.video_url
-                      )
-                    }
+                    onClick={() => handleDelete(recording)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -407,54 +493,30 @@ export const MonitorScreen = ({ onBack }: MonitorScreenProps) => {
       </div>
 
       {/* Video Player Modal */}
-      {selectedRecording && selectedRecording.video_url && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-4xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Recording Playback</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedRecording(null)}
-              >
-                Close
-              </Button>
-            </div>
-            <video
-              src={selectedRecording.video_url}
-              controls
-              className="w-full aspect-video bg-muted"
-            />
-          </Card>
-        </div>
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Recording?</DialogTitle>
-            <DialogDescription>
-              Do you want to delete video along with event annotations?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowDeleteDialog(false);
-                setRecordingToDelete(null);
-              }}
-              className="w-full sm:w-auto"
-            >
-              No
-            </Button>
-            <Button onClick={handleDelete} className="w-full sm:w-auto">
-              Yes, Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selectedRecording &&
+        (selectedRecording.video_url || selectedRecording.blobUrl) && (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <Card className="w-full max-w-4xl p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Recording Playback</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedRecording(null)}
+                >
+                  Close
+                </Button>
+              </div>
+              <video
+                src={
+                  selectedRecording.blobUrl || selectedRecording.video_url || ""
+                }
+                controls
+                className="w-full aspect-video bg-muted"
+              />
+            </Card>
+          </div>
+        )}
     </div>
   );
 };

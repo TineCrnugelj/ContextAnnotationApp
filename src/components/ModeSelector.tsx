@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Video, Monitor } from "lucide-react";
 
 interface ModeSelectorProps {
-  onSelectMode: (mode: 'recording' | 'monitor') => void;
+  onSelectMode: (mode: "recording" | "monitor") => void;
 }
 
 export const ModeSelector = ({ onSelectMode }: ModeSelectorProps) => {
@@ -14,10 +14,10 @@ export const ModeSelector = ({ onSelectMode }: ModeSelectorProps) => {
           <h1 className="text-3xl font-bold mb-2">Context Annotation</h1>
           <p className="text-muted-foreground">Select your mode to continue</p>
         </div>
-        
+
         <div className="space-y-4">
           <Button
-            onClick={() => onSelectMode('recording')}
+            onClick={() => onSelectMode("recording")}
             className="w-full h-24 text-lg"
             variant="default"
             size="lg"
@@ -25,9 +25,9 @@ export const ModeSelector = ({ onSelectMode }: ModeSelectorProps) => {
             <Video className="mr-3 h-6 w-6" />
             Recording Mode
           </Button>
-          
+
           <Button
-            onClick={() => onSelectMode('monitor')}
+            onClick={() => onSelectMode("monitor")}
             className="w-full h-24 text-lg"
             variant="secondary"
             size="lg"
@@ -36,9 +36,10 @@ export const ModeSelector = ({ onSelectMode }: ModeSelectorProps) => {
             Monitor Mode
           </Button>
         </div>
-        
+
         <p className="text-xs text-muted-foreground text-center mt-8">
-          Recording mode: Record and annotate interactions<br />
+          Recording mode: Record and annotate interactions
+          <br />
           Monitor mode: View stored recordings
         </p>
       </Card>
