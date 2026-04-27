@@ -15,9 +15,12 @@ import {
   Loader2,
   Mic,
   MicOff,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { useRecording } from "@/hooks/useRecording";
 import { useSensors } from "@/hooks/useSensors";
+import { useMqtt } from "@/hooks/useMqtt";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -63,6 +66,13 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
     logSensorData,
   } = useRecording();
 
+  const {
+    connect: mqttConnect,
+    disconnect: mqttDisconnect,
+    publish: mqttPublish,
+    isConnected: mqttConnected,
+  } = useMqtt();
+
   // Cache sensor type ids (avoid a DB lookup on every sensor reading)
   const sensorTypeIdByNameRef = useRef<Record<string, string>>({});
   const sensorTypesLoadingRef = useRef<Promise<void> | null>(null);
@@ -104,7 +114,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
       logSensorData(sensorTypeId, data);
     },
-    [ensureSensorTypesLoaded, isRecording, logSensorData]
+    [ensureSensorTypesLoaded, isRecording, logSensorData],
   );
 
   const sensorStatus = useSensors(isRecording, handleSensorData);
@@ -194,33 +204,73 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
   const handleStartStop = async () => {
     if (isRecording) {
+      // Publish run_stop before stopping
+      mqttPublish({
+        action_id: "confID2",
+        type: "control",
+        params: { command: "run_stop" },
+        meta: { priority: "high", source: "context-capture-companion" },
+      });
       await stopRecording();
+      mqttDisconnect();
       setEventCount(0);
     } else {
       setShowVideoDialog(true);
     }
   };
 
-  const handleStartWithVideo = async () => {
+  const startWithMqtt = async (withVideo: boolean) => {
     setShowVideoDialog(false);
-    if (stream) {
-      await startRecording(stream, true);
-      setEventCount(0);
+    if (!stream) return;
+
+    // Connect MQTT first (non-blocking: warn but allow recording if it fails)
+    try {
+      await mqttConnect();
+    } catch (err: any) {
+      toast({
+        title: "MQTT Warning",
+        description: `Could not connect to MQTT broker: ${err?.message ?? "unknown error"}. Recording will proceed locally.`,
+        variant: "destructive",
+      });
     }
+
+    await startRecording(stream, withVideo);
+    setEventCount(0);
+
+    // Publish run_stop after successful recording start
+    mqttPublish({
+      action_id: "confID2",
+      type: "control",
+      params: { command: "run_stop" },
+      meta: { priority: "high", source: "context-capture-companion" },
+    });
   };
 
-  const handleStartWithoutVideo = async () => {
-    setShowVideoDialog(false);
-    if (stream) {
-      await startRecording(stream, false);
-      setEventCount(0);
-    }
-  };
+  const handleStartWithVideo = () => startWithMqtt(true);
+  const handleStartWithoutVideo = () => startWithMqtt(false);
 
   const handleEventClick = (eventCodeId: string) => {
     if (!isRecording) return;
     logEvent(eventCodeId);
     setEventCount((prev) => prev + 1);
+
+    // Find the event code to build the MQTT payload
+    const event = eventCodes.find((e) => e.id === eventCodeId);
+    if (event) {
+      mqttPublish({
+        action_id: event.e_id,
+        type: "event",
+        params: {
+          code: event.e_description_butt,
+          description: event.e_description_engl,
+        },
+        meta: {
+          priority: "normal",
+          source: "context-capture-companion",
+          timestamp: Date.now(),
+        },
+      });
+    }
   };
 
   return (
@@ -273,6 +323,17 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
             Recording
           </Badge>
         )}
+        <Badge
+          variant={mqttConnected ? "default" : "secondary"}
+          className="flex items-center gap-1"
+        >
+          {mqttConnected ? (
+            <Wifi className="h-3 w-3" />
+          ) : (
+            <WifiOff className="h-3 w-3" />
+          )}
+          MQTT {mqttConnected ? "OK" : "Off"}
+        </Badge>
       </div>
 
       {/* Main Content */}
@@ -307,7 +368,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
                   >
                     {event.e_description_butt}
                   </Button>
-                )
+                ),
             )}
           </div>
         </Card>
