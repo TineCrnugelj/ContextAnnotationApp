@@ -1,9 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Video, Monitor } from "lucide-react";
+import { Video, Monitor, Settings } from "lucide-react";
 
 interface ModeSelectorProps {
-  onSelectMode: (mode: "recording" | "monitor") => void;
+  onSelectMode: (mode: "recording" | "monitor" | "config") => void;
 }
 
 export const ModeSelector = ({ onSelectMode }: ModeSelectorProps) => {
@@ -35,12 +35,24 @@ export const ModeSelector = ({ onSelectMode }: ModeSelectorProps) => {
             <Monitor className="mr-3 h-6 w-6" />
             Monitor Mode
           </Button>
+
+          <Button
+            onClick={() => onSelectMode("config")}
+            className="w-full h-24 text-lg"
+            variant="outline"
+            size="lg"
+          >
+            <Settings className="mr-3 h-6 w-6" />
+            Configuration
+          </Button>
         </div>
 
         <p className="text-xs text-muted-foreground text-center mt-8">
           Recording mode: Record and annotate interactions
           <br />
           Monitor mode: View stored recordings
+          <br />
+          Configuration: MQTT & app settings
         </p>
       </Card>
     </div>
