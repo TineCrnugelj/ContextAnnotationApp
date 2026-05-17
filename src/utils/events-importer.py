@@ -3,6 +3,7 @@ from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
 import argparse
+import json
 
 load_dotenv()
 
@@ -13,7 +14,7 @@ SUPABASE_KEY = os.getenv("VITE_SUPABASE_PUBLISHABLE_KEY")
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-events_file_nm = 'ContextAnnotationApp/src/utils/sample-data/EventCodes_v01.xlsx'
+events_file_nm = './sample-data/EventCodes_v04.xlsx'
 
 if __name__ == "__main__":
     #parser = argparse.ArgumentParser(description="Import gesture events to Supabase")
@@ -33,7 +34,8 @@ if __name__ == "__main__":
             "e_id": row["eID"],
             "e_description_butt": row["eDescriptionButt"],
             "notes": row["Notes"],
-            "e_active": "Y"
+            "e_active": "Y",
+            "mqtt_payload": json.loads(row["mqttPayload"]) if "mqttPayload" in row and pd.notna(row["mqttPayload"]) else None,
         }
         # Replace NaN or infinite values with None
         for k, v in event_data.items():
