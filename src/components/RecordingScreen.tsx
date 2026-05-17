@@ -32,6 +32,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+interface MqttPayload {
+  eID: string;
+  eInd: number;
+  eDescriptionButt: string;
+  eDescriptionENGL: string;
+}
+
 interface EventCode {
   id: string;
   e_ind: number;
@@ -42,6 +49,7 @@ interface EventCode {
   notes: string | null;
   enabled: boolean;
   e_active: "Y" | "N";
+  mqtt_payload: MqttPayload | null;
 }
 
 interface RecordingScreenProps {
@@ -138,7 +146,7 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
         return;
       }
 
-      setEventCodes(data || []);
+      setEventCodes((data as unknown as EventCode[]) || []);
     };
 
     loadEventCodes();
@@ -256,13 +264,13 @@ export const RecordingScreen = ({ onBack }: RecordingScreenProps) => {
 
     // Find the event code to build the MQTT payload
     const event = eventCodes.find((e) => e.id === eventCodeId);
-    if (event) {
+    if (event?.mqtt_payload) {
       mqttPublish({
-        action_id: event.e_id,
+        action_id: event.mqtt_payload.eID,
         type: "event",
         params: {
-          code: event.e_description_butt,
-          description: event.e_description_engl,
+          code: event.mqtt_payload.eDescriptionButt,
+          description: event.mqtt_payload.eDescriptionENGL,
         },
         meta: {
           priority: "normal",
